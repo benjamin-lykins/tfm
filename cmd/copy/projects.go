@@ -355,3 +355,33 @@ func copyProjects(c tfclient.ClientContexts, projMapCfg map[string]string) error
 	}
 	return nil
 }
+
+func createProject(c tfclient.ClientContexts, projectName string) (*tfe.Project, error) {
+	o.AddMessageUserProvided("Creating Project in destination:", projectName)
+
+	var description string = "Project created by tfm"
+
+	destProjects, err := listDestProjects(tfclient.GetClientContexts(), false)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to list Projects from destination target")
+	}
+
+	exists := doesProjectExist(projectName, destProjects)
+
+	if exists {
+		o.AddMessageUserProvided(projectName, "already exists in destination, skipping creation")
+		return nil, nil
+	}
+
+	project, err := c.DestinationClient.Projects.Create(c.DestinationContext, c.DestinationOrganizationName, tfe.ProjectCreateOptions{
+		Name:        projectName,
+		Description: &description,
+	})
+	if err != nil {
+		fmt.Println("Could not create Project.\n\n Error:", err.Error())
+		return nil, errors.Wrap(err, "Failed to create project in destination")
+	}
+
+	return project, err
+}

@@ -418,7 +418,7 @@ func copyWorkspaces(c tfclient.ClientContexts, wsMapCfg map[string]string) error
 		return errors.Wrap(err, "Failed to list workspaces from destination target")
 	}
 
-	var project tfe.Project
+	var project *tfe.Project
 
 	// Check if Project ID is set
 	if viper.GetString("dst_tfc_project_id") != "" {
@@ -428,12 +428,53 @@ func copyWorkspaces(c tfclient.ClientContexts, wsMapCfg map[string]string) error
 
 	} else {
 
-		// get Default Project ID
-		project.ID, err = getDstDefaultProjectID(c)
+		// If no project ID is set, ask if the user wants to create a new project from the source organization name.
 
-		if err != nil {
-			fmt.Println("Error Retrieving Destination Project ID. Destination TFE/TFC API may not be supported. Please check credentials")
-			os.Exit(0)
+		fmt.Println("No Project ID set. Select an option below to continue operation:")
+		fmt.Println("1 - Create a new project with the same name as the source organization")
+		fmt.Println("2 - Specify a new project name")
+		fmt.Println("3 - Use the default project ID")
+		fmt.Println("4 - Exit")
+
+		var choice int
+		fmt.Print("Your choice: ")
+		fmt.Scanln(&choice)
+
+		switch choice {
+		case 1:
+			fmt.Printf("Creating a new project with the name: %s\n", c.SourceOrganizationName)
+			project, err = createProject(c, c.SourceOrganizationName)
+
+			if err != nil {
+				fmt.Println("Error creating project:", err)
+				os.Exit(1)
+			}
+
+		case 2:
+			fmt.Print("Enter the new project name: ")
+			var projectName string
+
+			// need to add error
+			fmt.Scan(&projectName)
+			createProject(c, projectName)
+
+		case 3:
+			fmt.Println("Using default project ID")
+
+			// If the user does not want to create a new project, then get the default project ID.
+			// get Default Project ID
+			project.ID, err = getDstDefaultProjectID(c)
+
+			if err != nil {
+				fmt.Println("Error Retrieving Destination Project ID. Destination TFE/TFC API may not be supported. Please check credentials")
+				os.Exit(0)
+			}
+		case 4:
+			fmt.Println("\n\n**** Canceling tfm run **** ")
+			os.Exit(1)
+		default:
+			fmt.Println("\n\n**** Canceling tfm run **** ")
+			os.Exit(1)
 		}
 	}
 
@@ -472,9 +513,9 @@ func copyWorkspaces(c tfclient.ClientContexts, wsMapCfg map[string]string) error
 				FileTriggersEnabled: &srcworkspace.FileTriggersEnabled,
 				GlobalRemoteState:   &srcworkspace.GlobalRemoteState,
 				// MigrationEnvironment:       new(string), legacy usage only will not add
-				Name:               &destWorkSpaceName,
-				QueueAllRuns:       &srcworkspace.QueueAllRuns,
-				SpeculativeEnabled: &srcworkspace.SpeculativeEnabled,
+				Name:                       &destWorkSpaceName,
+				QueueAllRuns:               &srcworkspace.QueueAllRuns,
+				SpeculativeEnabled:         &srcworkspace.SpeculativeEnabled,
 				StructuredRunOutputEnabled: &srcworkspace.StructuredRunOutputEnabled,
 				TerraformVersion:           &srcworkspace.TerraformVersion,
 				TriggerPrefixes:            srcworkspace.TriggerPrefixes,
@@ -482,7 +523,7 @@ func copyWorkspaces(c tfclient.ClientContexts, wsMapCfg map[string]string) error
 				//VCSRepo: &tfe.VCSRepoOptions{}, covered with `configureVCSsettings` function`
 				WorkingDirectory: &srcworkspace.WorkingDirectory,
 				Tags:             tag,
-				Project:          &project,
+				Project:          project,
 			})
 			if err != nil {
 				fmt.Println("Could not create Workspace.\n\n Error:", err.Error())
